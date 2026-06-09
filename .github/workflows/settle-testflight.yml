@@ -249,15 +249,28 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Vérifier app App Store Connect
+        if: ${{ github.event.inputs.upload_testflight != 'false' }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          BUNDLE_ID_APP: ${{ env.BUNDLE_ID_APP }}
+        run: |
+          brew list fastlane >/dev/null 2>&1 || brew install fastlane
+          fastlane ios verify_asc_app
+
       - name: Upload vers TestFlight
         id: testflight_upload
         if: ${{ github.event.inputs.upload_testflight != 'false' }}
-        uses: apple-actions/upload-testflight-build@v3
-        with:
-          app-path: ${{ env.IPA_PATH }}
-          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
-          api-key-id: ${{ secrets.ASC_KEY_ID }}
-          api-private-key: ${{ secrets.ASC_PRIVATE_KEY }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          IPA_PATH: ${{ env.IPA_PATH }}
+        run: |
+          brew list fastlane >/dev/null 2>&1 || brew install fastlane
+          fastlane ios upload_testflight
 
       - name: Où voir la build (résumé)
         if: always()

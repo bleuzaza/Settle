@@ -61,7 +61,7 @@ while ((Get-Date) -lt $deadline) {
     $fullLog = Join-Path $LogDir "testflight-latest-full.log"
     gh run view $RunId --repo $Repo --log 2>&1 | Out-File -FilePath $fullLog -Encoding utf8
 
-    if (Select-String -Path $fullLog -Pattern "altool.*ERROR:|Cannot determine the Apple ID" -Quiet) {
+    if (Select-String -Path $fullLog -Pattern "altool.*ERROR:|Cannot determine the Apple ID|Aucune app App Store Connect|upload_testflight.*failed|Fastlane.*error" -Quiet) {
       Write-Host "ATTENTION: build OK mais upload TestFlight echoue" -ForegroundColor Yellow
       gh run view $RunId --repo $Repo --log-failed 2>&1 | Out-File -FilePath $LogFile -Encoding utf8
       Report-Failure $info.url

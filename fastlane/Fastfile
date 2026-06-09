@@ -136,4 +136,49 @@ platform :ios do
     )
     UI.success("Profil app régénéré avec cert_id #{cert_id}")
   end
+
+  desc "Vérifie que l'app existe sur App Store Connect"
+  lane :verify_asc_app do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_PRIVATE_KEY"),
+      is_key_content_base64: false
+    )
+
+    bundle_id = ENV.fetch("BUNDLE_ID_APP", "com.cashthetrain.settle")
+    apps = Spaceship::ConnectAPI::App.all(filter: { bundle_id: bundle_id })
+
+    if apps.nil? || apps.empty?
+      UI.user_error!(
+        "Aucune app App Store Connect pour #{bundle_id}. " \
+        "Cree l'app sur appstoreconnect.apple.com avec CE bundle ID exact (team 4N92TKQ397)."
+      )
+    end
+
+    app = apps.first
+    UI.success("App ASC OK: #{app.name} (id #{app.id}, bundle #{bundle_id})")
+  end
+
+  desc "Upload IPA vers TestFlight via API App Store Connect"
+  lane :upload_testflight do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_PRIVATE_KEY"),
+      is_key_content_base64: false
+    )
+
+    ipa_path = ENV.fetch("IPA_PATH")
+    UI.user_error!("IPA introuvable: #{ipa_path}") unless File.exist?(ipa_path)
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ipa_path,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+      notify_external_testers: false
+    )
+    UI.success("Upload TestFlight OK — #{ipa_path}")
+  end
 end
