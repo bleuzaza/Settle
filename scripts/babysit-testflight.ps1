@@ -1,14 +1,16 @@
-# Surveille Settle TestFlight, extrait les erreurs, relance le workflow.
+# Surveille Settle TestFlight (archive ou upload-only).
 # Usage:
-#   .\scripts\babysit-testflight.ps1              # attend la fin du dernier run
-#   .\scripts\babysit-testflight.ps1 -Trigger       # lance un nouveau run puis surveille
+#   .\scripts\babysit-testflight.ps1              # attend la fin du dernier run archive
+#   .\scripts\babysit-testflight.ps1 -Trigger       # lance archive puis surveille
 #   .\scripts\babysit-testflight.ps1 -RunId 123   # surveille un run précis
+#   .\scripts\babysit-testflight.ps1 -UploadOnly -RunId 123  # surveille upload-only
 
 param(
   [string]$Repo = "bleuzaza/Settle",
   [string]$Workflow = "settle-testflight.yml",
   [string]$RunId = "",
   [switch]$Trigger,
+  [switch]$UploadOnly,
   [int]$PollSeconds = 30,
   [int]$MaxMinutes = 90
 )
@@ -18,6 +20,8 @@ $env:Path = "C:\Program Files\Git\cmd;C:\Program Files\Git\bin;C:\Program Files\
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $LogDir = Join-Path $Root "Output"
 $LogFile = Join-Path $LogDir "testflight-latest-failure.log"
+
+if ($UploadOnly) { $Workflow = "settle-upload-testflight.yml" }
 
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
@@ -40,7 +44,15 @@ function Get-LatestRun {
 
 if ($Trigger) {
   Write-Host "Lancement workflow $Workflow..." -ForegroundColor Cyan
-  gh workflow run $Workflow --repo $Repo
+  if ($UploadOnly) {
+    if (-not $RunId) {
+      Write-Host "Upload-only: fournis -RunId (run archive avec artifact Settle-ipa)" -ForegroundColor Red
+      exit 2
+    }
+    gh workflow run $Workflow --repo $Repo -f run_id=$RunId
+  } else {
+    gh workflow run $Workflow --repo $Repo
+  }
   Start-Sleep -Seconds 8
 }
 
@@ -50,7 +62,7 @@ if (-not $RunId) {
   $RunId = $run.databaseId
 }
 
-Write-Host "Surveillance run $RunId ($Repo)" -ForegroundColor Cyan
+Write-Host "Surveillance run $RunId ($Repo / $Workflow)" -ForegroundColor Cyan
 $deadline = (Get-Date).AddMinutes($MaxMinutes)
 
 while ((Get-Date) -lt $deadline) {
@@ -61,11 +73,13 @@ while ((Get-Date) -lt $deadline) {
     $fullLog = Join-Path $LogDir "testflight-latest-full.log"
     gh run view $RunId --repo $Repo --log 2>&1 | Out-File -FilePath $fullLog -Encoding utf8
 
-    if (Select-String -Path $fullLog -Pattern "altool.*ERROR:|Cannot determine the Apple ID|Aucune app App Store Connect|upload_testflight.*failed|Fastlane.*error" -Quiet) {
-      Write-Host "ATTENTION: build OK mais upload TestFlight echoue" -ForegroundColor Yellow
+    $uploadFailed = Select-String -Path $fullLog -Pattern "altool.*ERROR:|Cannot determine the Apple ID|Aucune app App Store Connect|upload-testflight-build.*failed|Upload TestFlight : \*\*échec\*\*" -Quiet
+
+    if ($uploadFailed -and -not $UploadOnly) {
+      Write-Host "ATTENTION: archive/IPA OK mais upload TestFlight echoue" -ForegroundColor Yellow
       gh run view $RunId --repo $Repo --log-failed 2>&1 | Out-File -FilePath $LogFile -Encoding utf8
       Report-Failure $info.url
-      Write-Host "Action: creer l'app Settle (com.cashthetrain.settle) sur App Store Connect puis relancer RUN-TESTFLIGHT.bat" -ForegroundColor Yellow
+      Write-Host "Action: RUN-UPLOAD.bat $RunId  (reutilise l'IPA signee, pas de rebuild)" -ForegroundColor Yellow
       exit 1
     }
 

@@ -1,0 +1,63 @@
+# Upload TestFlight uniquement — réutilise l'IPA signée d'un run Archive existant.
+# Ne rebuild PAS. Utilise quand l'archive/export IPA est OK mais l'upload a échoué.
+
+name: Settle Upload TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run ID GitHub du workflow Archive (artifact Settle-ipa)"
+        type: string
+        required: true
+
+jobs:
+  upload-only:
+    name: Upload IPA → TestFlight
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Vérifier run_id
+        run: |
+          if [ -z "${{ github.event.inputs.run_id }}" ]; then
+            echo "::error::run_id requis — copie l'ID du run Archive réussi (artifact Settle-ipa)"
+            exit 1
+          fi
+          echo "Réutilisation artifact Settle-ipa du run ${{ github.event.inputs.run_id }}"
+
+      - name: Télécharger IPA signée (artifact existant)
+        uses: actions/download-artifact@v4
+        with:
+          name: Settle-ipa
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.inputs.run_id }}
+          path: ${{ runner.temp }}/ipa
+
+      - name: Vérifier IPA
+        run: |
+          set -euo pipefail
+          IPA="${{ runner.temp }}/ipa/Settle.ipa"
+          test -f "$IPA" || (echo "::error::Settle.ipa introuvable dans l'artifact" && exit 1)
+          ls -la "${{ runner.temp }}/ipa/"
+          unzip -l "$IPA" | head -20
+
+      - name: Upload vers TestFlight
+        id: testflight_upload
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ runner.temp }}/ipa/Settle.ipa
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ secrets.ASC_PRIVATE_KEY }}
+
+      - name: Résumé
+        if: always()
+        run: |
+          echo "## Settle Upload TestFlight" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source run_id : **${{ github.event.inputs.run_id }}**" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.testflight_upload.outcome }}" = "success" ]; then
+            echo "Upload : **OK** — build visible dans 5 à 30 min sur App Store Connect." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Upload : **échec** — vérifie que l'app \`com.cashthetrain.settle\` existe sur ASC et que les secrets ASC_* sont valides." >> "$GITHUB_STEP_SUMMARY"
+          fi

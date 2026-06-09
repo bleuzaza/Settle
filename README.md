@@ -1,47 +1,24 @@
-# Settle iOS
+# Settle — iOS (Swift natif)
 
-App Expo (React Native) — décharge mentale : notes, agenda, **dictée vocale**.
+App de décharge mentale : notes, agenda, dictée vocale.
 
-Déploiement TestFlight **comme Panium** : Xcode sur GitHub Actions + tes secrets Apple (pas d'EAS, pas de compte Expo).
+## Structure (comme Panium)
 
-## Stack
-
-- Expo SDK 54 · React Native
-- `expo-speech-recognition` (dictée — build natif / TestFlight uniquement)
-- CI : `expo prebuild` → `xcodebuild archive` → TestFlight
-
-## Secrets GitHub (mêmes que Panium)
-
-| Secret | Description |
-|--------|-------------|
-| `ASC_KEY_ID` | Clé API App Store Connect |
-| `ASC_ISSUER_ID` | Issuer ID |
-| `ASC_PRIVATE_KEY` | Contenu du `.p8` |
-| `IOS_DISTRIBUTION_CERTIFICATE_BASE64` | Certificat Distribution `.p12` (base64) |
-| `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD` | Mot de passe du `.p12` |
-| `KEYCHAIN_PASSWORD` | Mot de passe trousseau CI |
-| `IOS_DISTRIBUTION_CERTIFICATE_ID` | ID certificat Apple (recommandé) |
+```
+Settle/           App SwiftUI
+project.yml       XcodeGen
+ci/               Pipeline signing + archive
+.github/workflows/
+  settle-testflight.yml         Archive + IPA (artifact Settle-ipa)
+  settle-upload-testflight.yml  Upload TestFlight seul (réutilise IPA)
+legacy-rn/        Ancienne version Expo/React Native (référence)
+```
 
 ## TestFlight
 
-1. Créer l'app **Settle** + bundle `com.cashthetrain.settle` sur Apple Developer **et App Store Connect**
-2. Copier les secrets GitHub depuis Panium (même compte Apple)
-3. Lancer et surveiller :
-   - `RUN-TESTFLIGHT.bat` — lance le workflow
-   - `BABYSIT-TESTFLIGHT.bat` — attend la fin et extrait les erreurs dans `Output/`
+1. **Archive** : `RUN-ARCHIVE.bat` ou workflow `Settle TestFlight` (upload désactivé par défaut)
+2. **Upload seul** (si IPA OK mais upload échoué) : `RUN-UPLOAD.bat RUN_ID`
 
-Voir [docs/TESTFLIGHT.md](docs/TESTFLIGHT.md).
+Bundle ID : `com.cashthetrain.settle` · Team : `4N92TKQ397`
 
-## Dev local (Windows)
-
-```powershell
-cd D:\APPSTORE\Settle
-npm install
-npm start
-```
-
-Expo Go = UI seulement. La dictée nécessite un build natif (TestFlight).
-
-## Bundle ID
-
-`com.cashthetrain.settle` — Team `4N92TKQ397`
+Secrets GitHub (identiques à Panium) : `ASC_*`, `IOS_DISTRIBUTION_*`, `KEYCHAIN_PASSWORD`, `IOS_DISTRIBUTION_CERTIFICATE_ID`

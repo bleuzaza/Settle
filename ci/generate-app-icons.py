@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Génère AppIcon.appiconset pour Panium — fond noir + disque handpan bleu."""
+"""Génère AppIcon.appiconset pour Settle — fond noir + carré bleu accent."""
 from __future__ import annotations
 
 import json
@@ -8,11 +8,10 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ICONSET = ROOT / "Panium" / "Resources" / "Assets.xcassets" / "AppIcon.appiconset"
+ICONSET = ROOT / "Settle" / "Resources" / "Assets.xcassets" / "AppIcon.appiconset"
 
-BG_R, BG_G, BG_B = 0, 0, 0
-DISK_R, DISK_G, DISK_B = 91, 141, 239
-RING_R, RING_G, RING_B = 30, 30, 36
+BG_R, BG_G, BG_B = 13, 13, 13
+ACCENT_R, ACCENT_G, ACCENT_B = 0, 47, 230
 
 ICONS: list[tuple[str, int, str, str, str]] = [
     ("Icon-40.png", 40, "iphone", "20x20", "2x"),
@@ -45,8 +44,7 @@ def rgba_png(size: int, pixels: bytes) -> bytes:
 def draw_icon(size: int) -> bytes:
     buf = bytearray(size * size * 3)
     cx, cy = size / 2, size / 2
-    outer_r = size * 0.38
-    inner_r = size * 0.12
+    square_half = size * 0.22
     margin = size * 0.08
     corner_r = size * 0.18
 
@@ -65,15 +63,10 @@ def draw_icon(size: int) -> bytes:
                         in_rounded_rect = False
                         break
 
-            dx, dy = x - cx, y - cy
-            dist = (dx * dx + dy * dy) ** 0.5
-
             if not in_rounded_rect:
                 pr, pg, pb = 0, 0, 0
-            elif dist <= inner_r:
-                pr, pg, pb = DISK_R, DISK_G, DISK_B
-            elif dist <= outer_r:
-                pr, pg, pb = RING_R, RING_G, RING_B
+            elif abs(x - cx) <= square_half and abs(y - cy) <= square_half:
+                pr, pg, pb = ACCENT_R, ACCENT_G, ACCENT_B
             else:
                 pr, pg, pb = BG_R, BG_G, BG_B
 

@@ -9,11 +9,15 @@ on:
       - "ci/**"
       - ".github/workflows/**"
       - "fastlane/Fastfile"
+      - "project.yml"
+      - "Settle/**"
   pull_request:
     paths:
       - "ci/**"
       - ".github/workflows/**"
       - "fastlane/Fastfile"
+      - "project.yml"
+      - "Settle/**"
 
 jobs:
   verify-testflight-pipeline:

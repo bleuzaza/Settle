@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Bootstrap signing Settle — cert + profil App Store via Fastlane + API Apple
+# Bootstrap signing Panium — cert + profil App Store via Fastlane + API Apple
 set -euo pipefail
 
 : "${ASC_KEY_ID:?}"
 : "${ASC_ISSUER_ID:?}"
 : "${ASC_PRIVATE_KEY:?}"
 
-BUNDLE_APP="${BUNDLE_ID_APP:-com.cashthetrain.settle}"
+BUNDLE_APP="${BUNDLE_ID_APP:-com.cashthetrain.panium}"
 OUT_DIR="${GITHUB_WORKSPACE}/output/signing-bundle"
 API_JSON="${RUNNER_TEMP}/asc_api_key.json"
-KEYCHAIN_PATH="${RUNNER_TEMP}/settle-bootstrap.keychain-db"
+KEYCHAIN_PATH="${RUNNER_TEMP}/panium-bootstrap.keychain-db"
 CERTS_PATH="${RUNNER_TEMP}/certs"
 PROFILES_PATH="${RUNNER_TEMP}/profiles"
 P12_PASSWORD="${KEYCHAIN_PASSWORD:-$(openssl rand -hex 16)}"
@@ -124,4 +124,4 @@ if [ -n "$CERT_APPLE_ID" ]; then
   printf '%s' "$CERT_APPLE_ID" > "${OUT_DIR}/IOS_DISTRIBUTION_CERTIFICATE_ID.txt"
 fi
 
-echo "Bootstrap Settle terminé — artifact signing-files"
+echo "Bootstrap Panium terminé — artifact signing-files"

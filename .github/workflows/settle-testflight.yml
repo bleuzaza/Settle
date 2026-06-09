@@ -1,4 +1,5 @@
-# Settle iOS — Expo prebuild + Xcode archive + TestFlight (même secrets que Panium).
+# Archive Release + IPA — même pipeline que Panium (Swift natif + XcodeGen).
+# Upload TestFlight séparé : settle-upload-testflight.yml (réutilise l'artifact IPA).
 
 name: Settle TestFlight
 
@@ -6,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       upload_testflight:
-        description: "Uploader vers TestFlight après export"
+        description: "Uploader vers TestFlight après export (déconseillé — préférer settle-upload-testflight)"
         type: boolean
-        default: true
+        default: false
       build_number:
         description: "CFBundleVersion (vide = numéro de run GitHub)"
         type: string
@@ -17,12 +18,10 @@ on:
 
 env:
   XCODE_SCHEME: Settle
-  IOS_DEPLOYMENT_TARGET: "15.1"
+  IOS_DEPLOYMENT_TARGET: "17.0"
   XCODE_VERSION: "26.2"
   DEVELOPMENT_TEAM: "4N92TKQ397"
   BUNDLE_ID_APP: com.cashthetrain.settle
-  EXPO_NO_TELEMETRY: "1"
-  CI: "1"
 
 concurrency:
   group: settle-testflight-${{ github.ref }}
@@ -30,9 +29,9 @@ concurrency:
 
 jobs:
   archive-and-upload:
-    name: Prebuild + Archive + TestFlight
+    name: Archive + IPA
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -40,10 +39,7 @@ jobs:
 
       - name: Préparer scripts CI (LF, compatible Windows)
         run: |
-          for f in ci/*.sh; do
-            [ -f "$f" ] || continue
-            tr -d '\r' < "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-          done
+          for f in ci/*.sh; do tr -d '\r' < "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
 
       - name: Vérifier alignement pipeline TestFlight
         run: bash ci/verify-testflight-pipeline.sh
@@ -55,47 +51,13 @@ jobs:
 
       - name: Vérifier la structure
         run: |
-          test -f app.json
-          test -f package.json
+          test -f project.yml
           test -f ci/install_signing.py
+          test -d Settle
+          bash ci/verify-no-critical-entitlements.sh
           xcodebuild -version
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Installer les dépendances npm
-        run: npm ci
-
-      - name: Générer le projet iOS natif (Expo prebuild)
-        run: |
-          export NODE_BINARY="$(command -v node)"
-          npx expo prebuild --platform ios --clean --non-interactive
-
-      - name: Installer CocoaPods (Expo)
-        run: |
-          export NODE_BINARY="$(command -v node)"
-          npx pod-install --non-interactive
-
-      - name: Vérifier workspace CocoaPods
-        env:
-          XCODE_SCHEME: ${{ env.XCODE_SCHEME }}
-        run: |
-          WORKSPACE=$(bash ci/resolve-ios-workspace.sh)
-          echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
-          echo "Workspace CocoaPods: $WORKSPACE"
-          if echo "$WORKSPACE" | grep -q "project.xcworkspace"; then
-            echo "::error::Mauvais workspace (interne xcodeproj) — pod install a échoué?"
-            exit 1
-          fi
-          xcodebuild -list -workspace "$WORKSPACE" | head -40
-
-      - name: Vérifier entitlements
-        run: bash ci/verify-no-critical-entitlements.sh
-
-      - name: Installer certificat Distribution (réutilisé)
+      - name: Installer certificat Distribution (réutilisé — pas de nouveau cert)
         env:
           CI_APP_SLUG: settle
           IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
@@ -110,13 +72,15 @@ jobs:
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
           IOS_DISTRIBUTION_CERTIFICATE_ID: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_ID }}
-          BUNDLE_ID_APP: ${{ env.BUNDLE_ID_APP }}
         run: |
           if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
-            echo "::error::Secrets ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY requis"
+            echo "::error::Secrets ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY requis pour le profil"
             exit 1
           fi
           bash ci/refresh-profiles-api.sh
+
+      - name: Générer les icônes App Store
+        run: python3 ci/generate-app-icons.py
 
       - name: Numéro de build (unique par tentative)
         id: buildno
@@ -127,21 +91,25 @@ jobs:
             BN=$(( ${{ github.run_number }} * 10 + ${{ github.run_attempt }} ))
           fi
           if [ "$BN" -le 1 ]; then
-            echo "::error::CFBundleVersion doit être > 1. Valeur: $BN"
+            echo "::error::CFBundleVersion doit être > 1. Valeur calculée: $BN"
             exit 1
           fi
           echo "value=$BN" >> "$GITHUB_OUTPUT"
-          echo "CFBundleVersion=$BN"
+          echo "CFBundleVersion (unique)=$BN"
 
-      - name: Appliquer le numéro de build (Info.plist)
-        run: bash ci/apply-ios-build-number.sh "${{ steps.buildno.outputs.value }}"
+      - name: Appliquer le numéro de build (project.yml)
+        run: |
+          BN="${{ steps.buildno.outputs.value }}"
+          sed -i.bak "s/CURRENT_PROJECT_VERSION: \".*\"/CURRENT_PROJECT_VERSION: \"$BN\"/" project.yml
+          grep CURRENT_PROJECT_VERSION project.yml
 
-      - name: Appliquer signature manuelle (cible app uniquement)
-        env:
-          IOS_APP_PROFILE_UUID: ${{ env.IOS_APP_PROFILE_UUID }}
-          DEVELOPMENT_TEAM: ${{ env.DEVELOPMENT_TEAM }}
-          XCODE_TARGET: ${{ env.XCODE_SCHEME }}
-        run: python3 ci/patch-ios-signing.py
+      - name: Installer XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Générer le projet Xcode
+        run: xcodegen generate --spec project.yml
 
       - name: Configurer la clé API App Store Connect
         env:
@@ -150,7 +118,7 @@ jobs:
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
         run: |
           if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
-            echo "::error::Secrets ASC_* requis pour l'upload TestFlight"
+            echo "::error::Secrets ASC_* requis"
             exit 1
           fi
 
@@ -162,39 +130,32 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-      - name: Préparer modulemaps Expo/React
-        run: bash ci/ensure-expo-modulemaps.sh
-
-      - name: Archive (Release, signature app via pbxproj)
+      - name: Archive (Release, signature manuelle)
         env:
           ARCHIVE_PATH: ${{ runner.temp }}/Settle.xcarchive
-          DERIVED_DATA: ${{ runner.temp }}/DerivedData
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
-          export NODE_BINARY="$(command -v node)"
-          WORKSPACE="${WORKSPACE:-$(bash ci/resolve-ios-workspace.sh)}"
-          bash ci/ensure-expo-modulemaps.sh
-          echo "Workspace: $WORKSPACE"
           LOG="${RUNNER_TEMP}/xcode-archive.log"
           set +e
           xcodebuild archive \
-            -workspace "$WORKSPACE" \
+            -project "Settle.xcodeproj" \
             -scheme "${{ env.XCODE_SCHEME }}" \
             -configuration Release \
             -archivePath "$ARCHIVE_PATH" \
             -destination "generic/platform=iOS" \
             -sdk iphoneos \
-            -derivedDataPath "$DERIVED_DATA" \
             IPHONEOS_DEPLOYMENT_TARGET="${{ env.IOS_DEPLOYMENT_TARGET }}" \
             DEVELOPMENT_TEAM="${{ env.DEVELOPMENT_TEAM }}" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="${IOS_APP_PROFILE_UUID}" \
             CURRENT_PROJECT_VERSION="${{ steps.buildno.outputs.value }}" \
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
             2>&1 | tee "$LOG"
           STATUS=${PIPESTATUS[0]}
           set -e
           if [ "$STATUS" -ne 0 ]; then
-            echo "::group::Erreurs de compilation"
+            echo "::group::Erreurs de compilation Swift"
             grep -E "error:" "$LOG" | tail -60 || true
             echo "::endgroup::"
             exit "$STATUS"
@@ -214,26 +175,21 @@ jobs:
             -archivePath "$ARCHIVE_PATH" \
             -exportPath "$EXPORT_PATH" \
             -exportOptionsPlist ExportOptions-ci.plist
-          IPA=$(find "$EXPORT_PATH" -name "*.ipa" | head -1)
-          if [ -z "$IPA" ]; then
-            echo "::error::IPA introuvable après export"
-            exit 1
-          fi
-          echo "IPA_PATH=$IPA" >> "$GITHUB_ENV"
+          test -f "$EXPORT_PATH/Settle.ipa" || (echo "Settle.ipa introuvable" && exit 1)
 
       - name: Vérifier signature Distribution (anti ITMS-90035)
-        run: bash ci/verify-ipa-signature.sh "$IPA_PATH"
+        env:
+          EXPORT_PATH: ${{ runner.temp }}/export
+        run: bash ci/verify-ipa-signature.sh "$EXPORT_PATH/Settle.ipa"
 
       - name: Vérifier CFBundleVersion dans l'IPA
         env:
+          EXPORT_PATH: ${{ runner.temp }}/export
           EXPECTED_BUILD: ${{ steps.buildno.outputs.value }}
         run: |
           set -euo pipefail
-          INSPECT="${RUNNER_TEMP}/ipa-inspect"
-          rm -rf "$INSPECT"
-          mkdir -p "$INSPECT"
-          unzip -q -o "$IPA_PATH" -d "$INSPECT"
-          APP_PLIST=$(find "$INSPECT/Payload" -name Info.plist -path "*.app/Info.plist" | head -1)
+          unzip -q -o "$EXPORT_PATH/Settle.ipa" -d "$EXPORT_PATH/ipa-inspect"
+          APP_PLIST=$(find "$EXPORT_PATH/ipa-inspect/Payload" -name Info.plist -path "*.app/Info.plist" | head -1)
           ACTUAL=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST")
           echo "CFBundleVersion dans l'IPA: $ACTUAL (attendu: $EXPECTED_BUILD)"
           if [ "$ACTUAL" != "$EXPECTED_BUILD" ]; then
@@ -245,43 +201,31 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Settle-ipa
-          path: ${{ env.IPA_PATH }}
+          path: ${{ runner.temp }}/export/Settle.ipa
           if-no-files-found: error
           retention-days: 14
 
-      - name: Vérifier app App Store Connect
-        if: ${{ github.event.inputs.upload_testflight != 'false' }}
-        env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
-          BUNDLE_ID_APP: ${{ env.BUNDLE_ID_APP }}
-        run: |
-          brew list fastlane >/dev/null 2>&1 || brew install fastlane
-          fastlane ios verify_asc_app
-
       - name: Upload vers TestFlight
         id: testflight_upload
-        if: ${{ github.event.inputs.upload_testflight != 'false' }}
-        env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
-          IPA_PATH: ${{ env.IPA_PATH }}
-        run: |
-          brew list fastlane >/dev/null 2>&1 || brew install fastlane
-          fastlane ios upload_testflight
+        if: ${{ github.event.inputs.upload_testflight == 'true' }}
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ runner.temp }}/export/Settle.ipa
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ secrets.ASC_PRIVATE_KEY }}
 
       - name: Où voir la build (résumé)
         if: always()
         run: |
           echo "## Settle — Build ${{ steps.buildno.outputs.value }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifact : **Settle-ipa** (run_id=${{ github.run_id }})" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.testflight_upload.outcome }}" = "success" ]; then
             echo "Upload TestFlight : **OK** — la build apparaît dans 5 à 30 min." >> "$GITHUB_STEP_SUMMARY"
             echo "1. [App Store Connect](https://appstoreconnect.apple.com/apps) → app **Settle**" >> "$GITHUB_STEP_SUMMARY"
             echo "2. Onglet **TestFlight** → **Builds**" >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.testflight_upload.outcome }}" = "skipped" ]; then
-            echo "Upload TestFlight : **ignoré**" >> "$GITHUB_STEP_SUMMARY"
+            echo "Upload TestFlight : **ignoré** — lance \`settle-upload-testflight\` avec run_id=${{ github.run_id }}" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Upload TestFlight : **échec** — voir les logs." >> "$GITHUB_STEP_SUMMARY"
+            echo "Upload TestFlight : **échec** — relance \`settle-upload-testflight\` avec run_id=${{ github.run_id }} (pas de rebuild)." >> "$GITHUB_STEP_SUMMARY"
           fi

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Vérifie que scripts CI et workflow TestFlight restent alignés (évite push partiel).
+# Vérifie que scripts CI et workflows TestFlight restent alignés (évite push partiel).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-EXPECTED_VERSION="2"
+EXPECTED_VERSION="3"
 VERSION_FILE="ci/testflight-pipeline-version"
 
 fail() {
@@ -23,12 +23,14 @@ for required in ci/install_signing.py ci/refresh-profiles-api.sh ci/keychain-unl
   [[ -f "$required" ]] || fail "Manquant: $required"
 done
 
-shopt -s nullglob
-workflows=(.github/workflows/*-testflight.yml)
-[[ ${#workflows[@]} -gt 0 ]] || fail "Aucun workflow .github/workflows/*-testflight.yml"
+[[ -f .github/workflows/settle-upload-testflight.yml ]] || fail "Manquant: .github/workflows/settle-upload-testflight.yml"
 
-for wf in "${workflows[@]}"; do
-  echo "=== Vérification $wf ==="
+shopt -s nullglob
+archive_workflows=(.github/workflows/*-testflight.yml)
+[[ ${#archive_workflows[@]} -gt 0 ]] || fail "Aucun workflow .github/workflows/*-testflight.yml"
+
+for wf in "${archive_workflows[@]}"; do
+  echo "=== Vérification archive $wf ==="
   if grep -qE 'run:\s*bash ci/install-signing\.sh' "$wf" || grep -q 'test -f ci/install-signing\.sh' "$wf"; then
     fail "$wf utilise encore install-signing.sh — appeler python3 ci/install_signing.py"
   fi
@@ -37,11 +39,18 @@ for wf in "${workflows[@]}"; do
   grep -q 'Préparer scripts CI' "$wf" || fail "$wf doit normaliser les LF (étape Préparer scripts CI)"
   grep -q 'IOS_DISTRIBUTION_CERTIFICATE_ID' "$wf" || fail "$wf doit passer IOS_DISTRIBUTION_CERTIFICATE_ID"
   grep -q 'CI_APP_SLUG:' "$wf" || fail "$wf doit définir CI_APP_SLUG sur l'étape install certificat"
+  grep -q 'Settle-ipa' "$wf" || fail "$wf doit publier l'artifact Settle-ipa"
   keychain_pw_count="$(grep -c 'KEYCHAIN_PASSWORD: \${{ secrets.KEYCHAIN_PASSWORD }}' "$wf" || true)"
   if [[ "$keychain_pw_count" -lt 3 ]]; then
     fail "$wf doit exporter KEYCHAIN_PASSWORD sur install, archive et export (trouvé $keychain_pw_count, min 3)"
   fi
 done
+
+upload_wf=".github/workflows/settle-upload-testflight.yml"
+echo "=== Vérification upload-only $upload_wf ==="
+grep -q 'download-artifact@v4' "$upload_wf" || fail "$upload_wf doit télécharger Settle-ipa via download-artifact"
+grep -q 'upload-testflight-build@v3' "$upload_wf" || fail "$upload_wf doit uploader via apple-actions/upload-testflight-build@v3"
+grep -q 'run_id' "$upload_wf" || fail "$upload_wf doit accepter run_id en input"
 
 if [[ -f ci/install-signing.sh ]] && ! grep -q 'install_signing.py' ci/install-signing.sh; then
   fail "ci/install-signing.sh doit déléguer à install_signing.py"
