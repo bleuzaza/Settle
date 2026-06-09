@@ -58,6 +58,17 @@ while ((Get-Date) -lt $deadline) {
   Write-Host ("[{0}] {1} - {2}" -f (Get-Date -Format "HH:mm:ss"), $info.status, $info.displayTitle)
 
   if ($info.status -eq "completed") {
+    $fullLog = Join-Path $LogDir "testflight-latest-full.log"
+    gh run view $RunId --repo $Repo --log 2>&1 | Out-File -FilePath $fullLog -Encoding utf8
+
+    if (Select-String -Path $fullLog -Pattern "altool.*ERROR:|Cannot determine the Apple ID" -Quiet) {
+      Write-Host "ATTENTION: build OK mais upload TestFlight echoue" -ForegroundColor Yellow
+      gh run view $RunId --repo $Repo --log-failed 2>&1 | Out-File -FilePath $LogFile -Encoding utf8
+      Report-Failure $info.url
+      Write-Host "Action: creer l'app Settle (com.cashthetrain.settle) sur App Store Connect puis relancer RUN-TESTFLIGHT.bat" -ForegroundColor Yellow
+      exit 1
+    }
+
     if ($info.conclusion -eq "success") {
       Write-Host "OK - $($info.url)" -ForegroundColor Green
       if (Test-Path $LogFile) { Remove-Item $LogFile -Force }
@@ -67,15 +78,6 @@ while ((Get-Date) -lt $deadline) {
     Write-Host "ECHEC - extraction des logs..." -ForegroundColor Red
     gh run view $RunId --repo $Repo --log-failed 2>&1 | Out-File -FilePath $LogFile -Encoding utf8
     Report-Failure $info.url
-    exit 1
-  }
-
-  $fullLog = Join-Path $LogDir "testflight-latest-full.log"
-  gh run view $RunId --repo $Repo --log 2>&1 | Out-File -FilePath $fullLog -Encoding utf8
-  if (Select-String -Path $fullLog -Pattern "altool.*ERROR:|Cannot determine the Apple ID" -Quiet) {
-    Write-Host "ATTENTION: build OK mais upload TestFlight probablement echoue" -ForegroundColor Yellow
-    Report-Failure $info.url
-    Write-Host "Action: creer l'app Settle (com.cashthetrain.settle) sur App Store Connect puis relancer." -ForegroundColor Yellow
     exit 1
   }
 
