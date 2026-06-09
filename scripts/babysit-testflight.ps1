@@ -46,19 +46,19 @@ $deadline = (Get-Date).AddMinutes($MaxMinutes)
 
 while ((Get-Date) -lt $deadline) {
   $info = gh run view $RunId --repo $Repo --json status,conclusion,url,displayTitle | ConvertFrom-Json
-  Write-Host ("[{0}] {1} — {2}" -f (Get-Date -Format "HH:mm:ss"), $info.status, $info.displayTitle)
+  Write-Host ("[{0}] {1} - {2}" -f (Get-Date -Format "HH:mm:ss"), $info.status, $info.displayTitle)
 
   if ($info.status -eq "completed") {
     if ($info.conclusion -eq "success") {
-      Write-Host "OK — $($info.url)" -ForegroundColor Green
+      Write-Host "OK - $($info.url)" -ForegroundColor Green
       if (Test-Path $LogFile) { Remove-Item $LogFile -Force }
       exit 0
     }
 
-    Write-Host "ECHEC — extraction des logs..." -ForegroundColor Red
+    Write-Host "ECHEC - extraction des logs..." -ForegroundColor Red
     gh run view $RunId --repo $Repo --log-failed 2>&1 | Out-File -FilePath $LogFile -Encoding utf8
     $errors = Select-String -Path $LogFile -Pattern "error:|::error" | Select-Object -Last 25
-    Write-Host "`n--- Dernières erreurs ---" -ForegroundColor Yellow
+    Write-Host "`n--- Dernieres erreurs ---" -ForegroundColor Yellow
     $errors | ForEach-Object { Write-Host $_.Line }
     Write-Host "`nLog complet: $LogFile" -ForegroundColor Yellow
     Write-Host "URL: $($info.url)" -ForegroundColor Yellow
@@ -68,5 +68,5 @@ while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds $PollSeconds
 }
 
-Write-Host "Timeout après $MaxMinutes min — run $RunId encore en cours" -ForegroundColor Red
+Write-Host "Timeout apres $MaxMinutes min - run $RunId encore en cours" -ForegroundColor Red
 exit 2
