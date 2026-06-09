@@ -26,8 +26,14 @@ done
 [[ -f .github/workflows/settle-upload-testflight.yml ]] || fail "Manquant: .github/workflows/settle-upload-testflight.yml"
 
 shopt -s nullglob
-archive_workflows=(.github/workflows/*-testflight.yml)
-[[ ${#archive_workflows[@]} -gt 0 ]] || fail "Aucun workflow .github/workflows/*-testflight.yml"
+archive_workflows=()
+for wf in .github/workflows/*-testflight.yml; do
+  if [[ "$wf" == *upload-testflight* ]]; then
+    continue
+  fi
+  archive_workflows+=("$wf")
+done
+[[ ${#archive_workflows[@]} -gt 0 ]] || fail "Aucun workflow archive .github/workflows/*-testflight.yml (hors upload-only)"
 
 for wf in "${archive_workflows[@]}"; do
   echo "=== Vérification archive $wf ==="
