@@ -37,6 +37,7 @@ fastlane/test_output
 ci/Release-App.xcconfig
 ExportOptions-ci.plist
 output/
+Output/
 
 # Secrets
 *.p12
