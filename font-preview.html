@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settle — choix typo corps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400&family=Figtree:wght@400&family=Instrument+Serif:ital@0;1&family=Manrope:wght@400&family=Outfit:wght@400&family=Plus+Jakarta+Sans:wght@400&family=Sora:wght@400&family=DM+Sans:wght@400&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0D0D0D;
+      color: rgba(255,255,255,0.6);
+      font-family: system-ui, sans-serif;
+      padding: 24px 20px 48px;
+      max-width: 420px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-family: "Instrument Serif", serif;
+      font-style: italic;
+      font-size: 42px;
+      font-weight: 400;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .intro {
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 28px;
+      color: rgba(255,255,255,0.4);
+    }
+    .card {
+      background: #141414;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      padding: 18px 16px;
+      margin-bottom: 14px;
+    }
+    .card.recommended {
+      border-color: rgba(0,47,230,0.35);
+      box-shadow: 0 0 0 1px rgba(0,47,230,0.08);
+    }
+    .meta {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .name {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #3B6BFF;
+    }
+    .badge {
+      font-size: 10px;
+      color: rgba(255,255,255,0.35);
+      white-space: nowrap;
+    }
+    .screen-title {
+      font-family: "Instrument Serif", serif;
+      font-style: italic;
+      font-size: 28px;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .body {
+      font-size: 16px;
+      line-height: 1.55;
+      color: rgba(255,255,255,0.85);
+      margin-bottom: 10px;
+    }
+    .small {
+      font-size: 13px;
+      line-height: 1.5;
+      color: rgba(255,255,255,0.55);
+    }
+    .current { opacity: 0.7; }
+    .current .name { color: rgba(255,255,255,0.35); }
+
+    .jakarta .body, .jakarta .small { font-family: "Plus Jakarta Sans", sans-serif; }
+    .figtree .body, .figtree .small { font-family: "Figtree", sans-serif; }
+    .manrope .body, .manrope .small { font-family: "Manrope", sans-serif; }
+    .outfit .body, .outfit .small { font-family: "Outfit", sans-serif; }
+    .sora .body, .sora .small { font-family: "Sora", sans-serif; }
+    .bricolage .body, .bricolage .small { font-family: "Bricolage Grotesque", sans-serif; }
+    .dmsans .body, .dmsans .small { font-family: "DM Sans", sans-serif; }
+  </style>
+</head>
+<body>
+  <h1>Typo corps</h1>
+  <p class="intro">Titres = Instrument Serif (fixe). Compare le texte ci-dessous — même fond et couleurs que l’app.</p>
+
+  <div class="card current dmsans">
+    <div class="meta">
+      <span class="name">Actuelle — DM Sans</span>
+      <span class="badge">safe, neutre</span>
+    </div>
+    <div class="screen-title">Notes</div>
+    <p class="body">ce qui tourne en tête… j’ai une idée de scène pour le clip, faut que j’en parle à Karim mardi.</p>
+    <p class="small">Rien pour l'instant. Dépose une pensée au centre.</p>
+  </div>
+
+  <div class="card recommended jakarta">
+    <div class="meta">
+      <span class="name">Plus Jakarta Sans</span>
+      <span class="badge">★ mon #1</span>
+    </div>
+    <div class="screen-title">Notes</div>
+    <p class="body">ce qui tourne en tête… j’ai une idée de scène pour le clip, faut que j’en parle à Karim mardi.</p>
+    <p class="small">Rien pour l'instant. Dépose une pensée au centre.</p>
+  </div>
+
+  <div class="card figtree">
+    <div class="meta">
+      <span class="name">Figtree</span>
+      <span class="badge">chaleureux</span>
+    </div>
+    <div class="screen-title">Notes</div>
+    <p class="body">ce qui tourne en tête… j’ai une idée de scène pour le clip, faut que j’en parle à Karim mardi.</p>
+    <p class="small">Rien pour l'instant. Dépose une pensée au centre.</p>
+  </div>
+
+  <div class="card manrope">
+    <div class="meta">
+      <span class="name">Manrope</span>
+      <span class="badge">géométrique</span>
+    </div>
+    <div class="screen-title">Notes</div>
+    <p class="body">ce qui tourne en tête… j’ai une idée de scène pour le clip, faut que j’en parle à Karim mardi.</p>
+    <p class="small">Rien pour l'instant. Dépose une pensée au centre.</p>
+  </div>
+
+  <div class="card outfit">
+    <div class="meta">
+      <span class="name">Outfit</span>
+      <span class="badge">minimal chic</span>
+    </div>
+    <div class="screen-title">Notes</div>
+    <p class="body">ce qui tourne en tête… j’ai une idée de scène pour le clip, faut que j’en parle à Karim mardi.</p>
+    <p class="small">Rien pour l'instant. Dépose une pensée au centre.</p>
+  </div>
+
+  <div class="card sora">
+    <div class="meta">
+      <span class="name">Sora</span>
+      <span class="badge">futur doux</span>
+    </div>
+    <div class="screen-title">Notes</div>
+    <p class="body">ce qui tourne en tête… j’ai une idée de scène pour le clip, faut que j’en parle à Karim mardi.</p>
+    <p class="small">Rien pour l'instant. Dépose une pensée au centre.</p>
+  </div>
+
+  <div class="card bricolage">
+    <div class="meta">
+      <span class="name">Bricolage Grotesque</span>
+      <span class="badge">le plus original</span>
+    </div>
+    <div class="screen-title">Notes</div>
+    <p class="body">ce qui tourne en tête… j’ai une idée de scène pour le clip, faut que j’en parle à Karim mardi.</p>
+    <p class="small">Rien pour l'instant. Dépose une pensée au centre.</p>
+  </div>
+</body>
+</html>

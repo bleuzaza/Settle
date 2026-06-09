@@ -1,0 +1,139 @@
+# Signing App Store — Settle (com.cashthetrain.settle)
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Certificat Distribution + profil App Store Settle (clé API)"
+  lane :bootstrap_signing do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_PRIVATE_KEY"),
+      is_key_content_base64: false
+    )
+
+    keychain_path = ENV.fetch("KEYCHAIN_PATH")
+    keychain_password = ENV.fetch("KEYCHAIN_PASSWORD")
+    profiles_path = ENV.fetch("PROFILES_PATH")
+    certs_path = ENV.fetch("CERTS_PATH")
+    force_new = ENV["FORCE_NEW_CERT"] == "1"
+
+    cert(
+      api_key: api_key,
+      development: false,
+      platform: "ios",
+      force: force_new,
+      keychain_path: keychain_path,
+      keychain_password: keychain_password,
+      output_path: certs_path
+    )
+
+    cert_id = lane_context[SharedValues::CERT_CERTIFICATE_ID]
+    UI.user_error!("cert_id manquant après cert") if cert_id.to_s.empty?
+    UI.message("Certificat Apple ID: #{cert_id}")
+
+    sigh(
+      api_key: api_key,
+      app_identifier: "com.cashthetrain.settle",
+      team_id: "4N92TKQ397",
+      platform: "ios",
+      adhoc: false,
+      skip_install: true,
+      force: true,
+      output_path: profiles_path,
+      filename: "app.mobileprovision",
+      cert_id: cert_id
+    )
+    UI.success("Profil app.mobileprovision — #{lane_context[SharedValues::SIGH_NAME]}")
+  end
+
+  desc "CI TestFlight — certificat + profil depuis l'API Apple"
+  lane :ci_signing do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_PRIVATE_KEY"),
+      is_key_content_base64: false
+    )
+
+    keychain_path = ENV.fetch("KEYCHAIN_PATH")
+    keychain_password = ENV.fetch("KEYCHAIN_PASSWORD")
+    profiles_path = ENV.fetch("PROFILES_PATH")
+    certs_path = ENV.fetch("CERTS_PATH")
+    force_new = ENV["FORCE_NEW_CERT"] == "1"
+
+    cert(
+      api_key: api_key,
+      development: false,
+      platform: "ios",
+      force: force_new,
+      keychain_path: keychain_path,
+      keychain_password: keychain_password,
+      output_path: certs_path
+    )
+
+    cert_id = lane_context[SharedValues::CERT_CERTIFICATE_ID]
+    UI.user_error!("cert_id manquant après cert") if cert_id.to_s.empty?
+
+    sigh(
+      api_key: api_key,
+      app_identifier: "com.cashthetrain.settle",
+      team_id: "4N92TKQ397",
+      platform: "ios",
+      adhoc: false,
+      skip_install: true,
+      force: true,
+      output_path: profiles_path,
+      filename: "app.mobileprovision",
+      cert_id: cert_id
+    )
+    UI.success("CI signing OK — #{lane_context[SharedValues::SIGH_NAME]}")
+  end
+
+  desc "Régénère le profil App Store lié au certificat Distribution du trousseau CI"
+  lane :refresh_profiles do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_PRIVATE_KEY"),
+      is_key_content_base64: false
+    )
+
+    keychain_path = ENV.fetch("KEYCHAIN_PATH")
+    keychain_password = ENV.fetch("KEYCHAIN_PASSWORD")
+    profiles_path = ENV.fetch("PROFILES_PATH")
+    certs_path = ENV.fetch("CERTS_PATH")
+
+    cert_id = ENV["IOS_DISTRIBUTION_CERTIFICATE_ID"].to_s.strip
+    if cert_id.empty?
+      cert(
+        api_key: api_key,
+        development: false,
+        platform: "ios",
+        force: false,
+        keychain_path: keychain_path,
+        keychain_password: keychain_password,
+        output_path: certs_path
+      )
+      cert_id = lane_context[SharedValues::CERT_CERTIFICATE_ID].to_s
+    else
+      UI.message("IOS_DISTRIBUTION_CERTIFICATE_ID (secret) : #{cert_id}")
+    end
+
+    UI.user_error!("cert_id manquant — ajoute IOS_DISTRIBUTION_CERTIFICATE_ID ou relance bootstrap") if cert_id.empty?
+
+    sigh(
+      api_key: api_key,
+      app_identifier: "com.cashthetrain.settle",
+      team_id: "4N92TKQ397",
+      platform: "ios",
+      adhoc: false,
+      skip_install: true,
+      force: true,
+      output_path: profiles_path,
+      filename: "app.mobileprovision",
+      cert_id: cert_id
+    )
+    UI.success("Profil app régénéré avec cert_id #{cert_id}")
+  end
+end

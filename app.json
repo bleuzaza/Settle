@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Settle",
+    "slug": "settle",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "settle",
+    "ios": {
+      "bundleIdentifier": "com.cashthetrain.settle",
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDevelopmentRegion": "fr"
+      }
+    },
+    "android": {
+      "package": "com.cashthetrain.settle",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0D0D",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Settle utilise le micro pour la dictée vocale.",
+          "speechRecognitionPermission": "Settle transcrit ta voix en texte."
+        }
+      ]
+    ]
+  }
+}

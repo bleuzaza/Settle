@@ -1,0 +1,33 @@
+# Bloque un push si scripts CI signing et workflow TestFlight ne sont plus alignés.
+
+name: CI pipeline guard
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "ci/**"
+      - ".github/workflows/**"
+      - "fastlane/Fastfile"
+  pull_request:
+    paths:
+      - "ci/**"
+      - ".github/workflows/**"
+      - "fastlane/Fastfile"
+
+jobs:
+  verify-testflight-pipeline:
+    name: Alignement pipeline TestFlight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normaliser LF (scripts shell)
+        run: |
+          for f in ci/*.sh; do
+            [ -f "$f" ] || continue
+            tr -d '\r' < "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+          done
+
+      - name: Vérifier alignement pipeline TestFlight
+        run: bash ci/verify-testflight-pipeline.sh

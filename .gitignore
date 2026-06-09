@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-tmp/
+dist/
+web-build/
+
+# Native (généré par expo prebuild en CI)
+ios/
+android/
+
+# Xcode / build
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad
+xcuserdata/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# CocoaPods
+Pods/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# macOS
+.DS_Store
+
+# CI généré
+ci/Release-App.xcconfig
+ExportOptions-ci.plist
+output/
+
+# Secrets
+*.p12
+*.mobileprovision
+.env
+.env.*
+
+# IDE
+.idea/
+*.swp
+*~

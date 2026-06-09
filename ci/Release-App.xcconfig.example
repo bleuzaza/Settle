@@ -1,0 +1,3 @@
+// Copie en ci/Release-App.xcconfig pour archive Release en local.
+// En CI, ce fichier est généré automatiquement par signing-from-api.sh
+PROVISIONING_PROFILE_SPECIFIER = UUID_PROFIL_APP_STORE_APP

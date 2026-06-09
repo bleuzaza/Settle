@@ -1,0 +1,252 @@
+# Settle iOS — Expo prebuild + Xcode archive + TestFlight (même secrets que Panium).
+
+name: Settle TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_testflight:
+        description: "Uploader vers TestFlight après export"
+        type: boolean
+        default: true
+      build_number:
+        description: "CFBundleVersion (vide = numéro de run GitHub)"
+        type: string
+        required: false
+        default: ""
+
+env:
+  XCODE_SCHEME: Settle
+  IOS_DEPLOYMENT_TARGET: "15.1"
+  XCODE_VERSION: "26.2"
+  DEVELOPMENT_TEAM: "4N92TKQ397"
+  BUNDLE_ID_APP: com.cashthetrain.settle
+  EXPO_NO_TELEMETRY: "1"
+  CI: "1"
+
+concurrency:
+  group: settle-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  archive-and-upload:
+    name: Prebuild + Archive + TestFlight
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Préparer scripts CI (LF, compatible Windows)
+        run: |
+          for f in ci/*.sh; do
+            [ -f "$f" ] || continue
+            tr -d '\r' < "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+          done
+
+      - name: Vérifier alignement pipeline TestFlight
+        run: bash ci/verify-testflight-pipeline.sh
+
+      - name: Sélectionner Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Vérifier la structure
+        run: |
+          test -f app.json
+          test -f package.json
+          test -f ci/install_signing.py
+          xcodebuild -version
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances npm
+        run: npm ci
+
+      - name: Générer le projet iOS natif (Expo prebuild)
+        run: npx expo prebuild --platform ios --non-interactive
+
+      - name: Installer CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Vérifier entitlements
+        run: bash ci/verify-no-critical-entitlements.sh
+
+      - name: Installer certificat Distribution (réutilisé)
+        env:
+          CI_APP_SLUG: settle
+          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: python3 ci/install_signing.py
+
+      - name: Régénérer profil App Store (API Apple)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          IOS_DISTRIBUTION_CERTIFICATE_ID: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_ID }}
+          BUNDLE_ID_APP: ${{ env.BUNDLE_ID_APP }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
+            echo "::error::Secrets ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY requis"
+            exit 1
+          fi
+          bash ci/refresh-profiles-api.sh
+
+      - name: Numéro de build (unique par tentative)
+        id: buildno
+        run: |
+          if [ -n "${{ github.event.inputs.build_number }}" ]; then
+            BN="${{ github.event.inputs.build_number }}"
+          else
+            BN=$(( ${{ github.run_number }} * 10 + ${{ github.run_attempt }} ))
+          fi
+          if [ "$BN" -le 1 ]; then
+            echo "::error::CFBundleVersion doit être > 1. Valeur: $BN"
+            exit 1
+          fi
+          echo "value=$BN" >> "$GITHUB_OUTPUT"
+          echo "CFBundleVersion=$BN"
+
+      - name: Appliquer le numéro de build (Info.plist)
+        run: bash ci/apply-ios-build-number.sh "${{ steps.buildno.outputs.value }}"
+
+      - name: Configurer la clé API App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
+            echo "::error::Secrets ASC_* requis pour l'upload TestFlight"
+            exit 1
+          fi
+
+      - name: Préparer le trousseau pour codesign
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          bash ci/keychain-unlock.sh
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Archive (Release, signature manuelle)
+        env:
+          ARCHIVE_PATH: ${{ runner.temp }}/Settle.xcarchive
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(find ios -name "*.xcworkspace" | head -1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "::error::Aucun .xcworkspace dans ios/"
+            exit 1
+          fi
+          echo "Workspace: $WORKSPACE"
+          LOG="${RUNNER_TEMP}/xcode-archive.log"
+          set +e
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "${{ env.XCODE_SCHEME }}" \
+            -configuration Release \
+            -archivePath "$ARCHIVE_PATH" \
+            -destination "generic/platform=iOS" \
+            -sdk iphoneos \
+            IPHONEOS_DEPLOYMENT_TARGET="${{ env.IOS_DEPLOYMENT_TARGET }}" \
+            DEVELOPMENT_TEAM="${{ env.DEVELOPMENT_TEAM }}" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="${IOS_APP_PROFILE_UUID}" \
+            CURRENT_PROJECT_VERSION="${{ steps.buildno.outputs.value }}" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
+            2>&1 | tee "$LOG"
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            echo "::group::Erreurs de compilation"
+            grep -E "error:" "$LOG" | tail -60 || true
+            echo "::endgroup::"
+            exit "$STATUS"
+          fi
+
+      - name: Export IPA (App Store)
+        env:
+          ARCHIVE_PATH: ${{ runner.temp }}/Settle.xcarchive
+          EXPORT_PATH: ${{ runner.temp }}/export
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bash ci/keychain-unlock.sh
+          rm -rf "$EXPORT_PATH"
+          mkdir -p "$EXPORT_PATH"
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist ExportOptions-ci.plist
+          IPA=$(find "$EXPORT_PATH" -name "*.ipa" | head -1)
+          if [ -z "$IPA" ]; then
+            echo "::error::IPA introuvable après export"
+            exit 1
+          fi
+          echo "IPA_PATH=$IPA" >> "$GITHUB_ENV"
+
+      - name: Vérifier signature Distribution (anti ITMS-90035)
+        run: bash ci/verify-ipa-signature.sh "$IPA_PATH"
+
+      - name: Vérifier CFBundleVersion dans l'IPA
+        env:
+          EXPECTED_BUILD: ${{ steps.buildno.outputs.value }}
+        run: |
+          set -euo pipefail
+          INSPECT="${RUNNER_TEMP}/ipa-inspect"
+          rm -rf "$INSPECT"
+          mkdir -p "$INSPECT"
+          unzip -q -o "$IPA_PATH" -d "$INSPECT"
+          APP_PLIST=$(find "$INSPECT/Payload" -name Info.plist -path "*.app/Info.plist" | head -1)
+          ACTUAL=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST")
+          echo "CFBundleVersion dans l'IPA: $ACTUAL (attendu: $EXPECTED_BUILD)"
+          if [ "$ACTUAL" != "$EXPECTED_BUILD" ]; then
+            echo "::error::L'IPA contient la build $ACTUAL au lieu de $EXPECTED_BUILD"
+            exit 1
+          fi
+
+      - name: Upload artifact IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Settle-ipa
+          path: ${{ env.IPA_PATH }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload vers TestFlight
+        id: testflight_upload
+        if: ${{ github.event.inputs.upload_testflight != 'false' }}
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ env.IPA_PATH }}
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ secrets.ASC_PRIVATE_KEY }}
+
+      - name: Où voir la build (résumé)
+        if: always()
+        run: |
+          echo "## Settle — Build ${{ steps.buildno.outputs.value }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.testflight_upload.outcome }}" = "success" ]; then
+            echo "Upload TestFlight : **OK** — la build apparaît dans 5 à 30 min." >> "$GITHUB_STEP_SUMMARY"
+            echo "1. [App Store Connect](https://appstoreconnect.apple.com/apps) → app **Settle**" >> "$GITHUB_STEP_SUMMARY"
+            echo "2. Onglet **TestFlight** → **Builds**" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.testflight_upload.outcome }}" = "skipped" ]; then
+            echo "Upload TestFlight : **ignoré**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Upload TestFlight : **échec** — voir les logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
