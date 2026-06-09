@@ -21,6 +21,15 @@ $LogFile = Join-Path $LogDir "testflight-latest-failure.log"
 
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
+function Report-Failure {
+  param([string]$Url)
+  $errors = Select-String -Path $LogFile -Pattern "error:|::error|altool.*ERROR" -ErrorAction SilentlyContinue | Select-Object -Last 25
+  Write-Host "`n--- Dernieres erreurs ---" -ForegroundColor Yellow
+  if ($errors) { $errors | ForEach-Object { Write-Host $_.Line } }
+  Write-Host "`nLog: $LogFile" -ForegroundColor Yellow
+  Write-Host "URL: $Url" -ForegroundColor Yellow
+}
+
 function Get-LatestRun {
   param([string]$Status = "")
   $args = @("run", "list", "--repo", $Repo, "--workflow", $Workflow, "--limit", "1", "--json", "databaseId,status,conclusion,url,displayTitle")
@@ -57,11 +66,16 @@ while ((Get-Date) -lt $deadline) {
 
     Write-Host "ECHEC - extraction des logs..." -ForegroundColor Red
     gh run view $RunId --repo $Repo --log-failed 2>&1 | Out-File -FilePath $LogFile -Encoding utf8
-    $errors = Select-String -Path $LogFile -Pattern "error:|::error" | Select-Object -Last 25
-    Write-Host "`n--- Dernieres erreurs ---" -ForegroundColor Yellow
-    $errors | ForEach-Object { Write-Host $_.Line }
-    Write-Host "`nLog complet: $LogFile" -ForegroundColor Yellow
-    Write-Host "URL: $($info.url)" -ForegroundColor Yellow
+    Report-Failure $info.url
+    exit 1
+  }
+
+  $fullLog = Join-Path $LogDir "testflight-latest-full.log"
+  gh run view $RunId --repo $Repo --log 2>&1 | Out-File -FilePath $fullLog -Encoding utf8
+  if (Select-String -Path $fullLog -Pattern "altool.*ERROR:|Cannot determine the Apple ID" -Quiet) {
+    Write-Host "ATTENTION: build OK mais upload TestFlight probablement echoue" -ForegroundColor Yellow
+    Report-Failure $info.url
+    Write-Host "Action: creer l'app Settle (com.cashthetrain.settle) sur App Store Connect puis relancer." -ForegroundColor Yellow
     exit 1
   }
 

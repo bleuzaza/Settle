@@ -24,9 +24,11 @@ Déploiement TestFlight **comme Panium** : Xcode sur GitHub Actions + tes secret
 
 ## TestFlight
 
-1. Créer l'app **Settle** + bundle `com.cashthetrain.settle` sur Apple Developer
+1. Créer l'app **Settle** + bundle `com.cashthetrain.settle` sur Apple Developer **et App Store Connect**
 2. Copier les secrets GitHub depuis Panium (même compte Apple)
-3. **Actions** → **Settle TestFlight** → **Run workflow**
+3. Lancer et surveiller :
+   - `RUN-TESTFLIGHT.bat` — lance le workflow
+   - `BABYSIT-TESTFLIGHT.bat` — attend la fin et extrait les erreurs dans `Output/`
 
 Voir [docs/TESTFLIGHT.md](docs/TESTFLIGHT.md).
 
